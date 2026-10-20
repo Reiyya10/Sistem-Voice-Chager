@@ -38,7 +38,7 @@ function convert() {
       </section>
       <section class="space-y-6">
         <VoiceRecorder @done="hasAudio = true; done = false" />
-        <label class="btn-ghost w-full cursor-pointer"><i class="fa-solid fa-upload"></i> Unggah Audio<input type="file" accept=".mp3,.wav,.m4a" class="sr-only" @change="onFile" /></label>
+        <label class="btn-ghost w-full cursor-pointer"><i class="fa-solid fa-upload"></i> Unggah Audio<input type="file" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.opus,.amr,.3gp" class="sr-only" @change="onFile" /></label>
         <p v-if="error" role="alert" class="text-red-400">{{ error }}</p>
         <AudioPlayer :ready="done" :busy="busy" />
       </section>
