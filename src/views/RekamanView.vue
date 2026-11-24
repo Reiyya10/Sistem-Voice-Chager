@@ -1,9 +1,13 @@
 <script setup>
 import { ref } from 'vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
-import { store, toast } from '../store'
+import { store, toast, removeRecording } from '../store'
 const target = ref(null)
-function remove() { store.recordings = store.recordings.filter((i) => i.id !== target.value); target.value = null; toast('Rekaman dihapus.') }
+async function remove() {
+  await removeRecording(target.value)
+  target.value = null
+  toast('Rekaman dihapus.')
+}
 </script>
 <template>
   <div class="wrap py-10">
@@ -17,7 +21,7 @@ function remove() { store.recordings = store.recordings.filter((i) => i.id !== t
       </li>
     </ul>
     <div v-if="!store.recordings.length" class="card text-center"><i class="fa-solid fa-microphone text-3xl text-slate-500"></i><p class="mt-2">Belum ada rekaman</p><router-link to="/voice-changer" class="btn-primary mt-4">Buat Rekaman Pertama</router-link></div>
-    <p class="mt-4 text-sm text-slate-500">Menyimpan maksimal 5 hasil terakhir di browser ini.</p>
+    <p class="mt-4 text-sm text-slate-500">Semua hasil disimpan di browser tanpa batas jumlah.</p>
     <ConfirmDialog v-if="target" title="Hapus rekaman ini?" text="Tindakan ini tidak bisa dibatalkan." ok-text="Hapus" @ok="remove" @cancel="target = null" />
   </div>
 </template>

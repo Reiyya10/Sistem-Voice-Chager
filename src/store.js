@@ -22,9 +22,46 @@ export const plans = [
 ]
 
 const KEY = 'suaraku-state'
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API = import.meta.env.VITE_API_URL || (import.meta.env.DEV
+  ? '/api'
+  : `${window.location.protocol}//${window.location.hostname || 'localhost'}:8000`)
+const RECORDING_DB = 'suaraku-recordings'
+const RECORDING_STORE = 'recordings'
 let saved = {}
 try { saved = JSON.parse(localStorage.getItem(KEY)) || {} } catch { saved = {} }
+
+function openRecordingDb() {
+  return new Promise((resolve, reject) => {
+    if (!('indexedDB' in window)) {
+      reject(new Error('IndexedDB tidak didukung browser ini.'))
+      return
+    }
+    const request = indexedDB.open(RECORDING_DB, 1)
+    request.onupgradeneeded = () => {
+      const db = request.result
+      if (!db.objectStoreNames.contains(RECORDING_STORE)) db.createObjectStore(RECORDING_STORE, { keyPath: 'id' })
+    }
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
+}
+
+async function loadRecordingBlobs() {
+  try {
+    const db = await openRecordingDb()
+    const rows = await new Promise((resolve, reject) => {
+      const request = db.transaction(RECORDING_STORE, 'readonly').objectStore(RECORDING_STORE).getAll()
+      request.onsuccess = () => resolve(request.result || [])
+      request.onerror = () => reject(request.error)
+    })
+    db.close()
+    store.recordings = rows
+      .sort((a, b) => b.id - a.id)
+      .map((row) => ({ ...row, url: URL.createObjectURL(row.blob) }))
+  } catch {
+    store.recordings = Array.isArray(saved.recordings) ? saved.recordings : []
+  }
+}
 
 export const store = reactive({
   loggedIn: saved.loggedIn || false,
@@ -41,6 +78,8 @@ export const store = reactive({
   toastMsg: '',
 })
 
+loadRecordingBlobs()
+
 watch(() => ({
   loggedIn: store.loggedIn,
   userName: store.userName,
@@ -52,15 +91,46 @@ watch(() => ({
   rvcModelId: store.rvcModelId,
   rvcModelName: store.rvcModelName,
   rvcModelOwner: store.rvcModelOwner,
-  recordings: store.recordings,
 }), (v) => {
   try { localStorage.setItem(KEY, JSON.stringify(v)) }
-  catch { try { localStorage.setItem(KEY, JSON.stringify({ ...v, recordings: [] })) } catch { /* penyimpanan penuh */ } }
+  catch { /* preferensi utama tetap di IndexedDB */ }
 }, { deep: true })
 
-export function addRecording(r) {
-  store.recordings.unshift(r)
-  if (store.recordings.length > 5) store.recordings.length = 5
+export async function addRecording(r) {
+  const row = { ...r, blob: r.blob }
+  try {
+    const db = await openRecordingDb()
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(RECORDING_STORE, 'readwrite')
+      tx.objectStore(RECORDING_STORE).put(row)
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => reject(tx.error)
+      tx.onabort = () => reject(tx.error)
+    })
+    db.close()
+  } catch (error) {
+    toast(error.message || 'Rekaman tidak dapat disimpan.')
+  }
+  store.recordings.unshift({ ...row, url: URL.createObjectURL(row.blob) })
+}
+
+export async function removeRecording(id) {
+  try {
+    const db = await openRecordingDb()
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(RECORDING_STORE, 'readwrite')
+      tx.objectStore(RECORDING_STORE).delete(id)
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => reject(tx.error)
+      tx.onabort = () => reject(tx.error)
+    })
+    db.close()
+  } catch (error) {
+    toast(error.message || 'Rekaman tidak dapat dihapus.')
+  }
+  const removed = store.recordings.find((recording) => recording.id === id)
+  if (removed?.url?.startsWith('blob:')) URL.revokeObjectURL(removed.url)
+  store.recordings = store.recordings.filter((recording) => recording.id !== id)
 }
 
 export const rupiah = (n) => 'Rp' + n.toLocaleString('id-ID')

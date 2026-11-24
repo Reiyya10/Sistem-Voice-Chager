@@ -8,9 +8,24 @@ function stop() { clearInterval(t); rec.value = false; if (mr && mr.state !== 'i
 async function toggle() {
   if (rec.value) return stop()
   err.value = ''
+  if (!window.isSecureContext) { err.value = 'Perekaman perlu HTTPS tepercaya. Buka alamat HTTPS aplikasi; localhost hanya berlaku di perangkat yang menjalankan browser.'; return }
   if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { err.value = 'Browser tidak mendukung perekaman. Pakai Chrome atau Edge lewat localhost atau HTTPS.'; return }
-  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }) }
-  catch { err.value = 'Izin mikrofon ditolak atau mikrofon tidak ditemukan.'; return }
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+        channelCount: 1,
+      },
+    })
+  }
+  catch (error) {
+    err.value = error.name === 'NotAllowedError'
+      ? 'Izin mikrofon ditolak. Izinkan mikrofon untuk situs ini di pengaturan browser.'
+      : 'Mikrofon tidak tersedia atau sedang digunakan aplikasi lain.'
+    return
+  }
   chunks = []
   mr = new MediaRecorder(stream)
   mr.ondataavailable = (e) => chunks.push(e.data)

@@ -12,6 +12,11 @@ const rvcLive = useLiveRvc()
 const sliders = [['pitch', 'Pitch', 50, 200], ['echo', 'Gema (echo)', 0, 100], ['reverb', 'Ruang (reverb)', 0, 100], ['volume', 'Volume', 0, 150]]
 const active = ref('normal')
 const rvcTune = ref(0)
+const rvcIndex = ref(85)
+const rvcRms = ref(25)
+const rvcProtect = ref(35)
+const rvcQuality = ref(1)
+const rvcDevice = ref('auto')
 const rvcRuntime = ref(null)
 const useRvc = computed(() => Boolean(store.rvcModelId))
 const live = computed(() => useRvc.value ? rvcLive.live.value : browserLive.live.value)
@@ -47,7 +52,15 @@ async function toggle() {
       toast('Upgrade ke Premium untuk menggunakan model RVC.')
       return
     }
-    await rvcLive.start(store.rvcModelId, { pitch: rvcTune.value, accessToken: store.accessToken })
+    await rvcLive.start(store.rvcModelId, {
+      pitch: rvcTune.value,
+      accessToken: store.accessToken,
+      indexInfluence: rvcIndex.value / 100,
+      rmsMixRate: rvcRms.value / 100,
+      consonantProtection: rvcProtect.value / 100,
+      rvcQuality: rvcQuality.value,
+      device: rvcDevice.value,
+    })
   }
   else await browserLive.start()
   if (live.value) toast('Live aktif. Pakai headset!')
@@ -80,13 +93,47 @@ async function toggle() {
     <section class="card space-y-4">
       <template v-if="useRvc">
         <h2 class="font-bold">RVC Live</h2>
-        <p class="text-sm text-slate-300">Audio diproses per potongan 6 detik. Hasil pertama memiliki jeda beberapa detik dan dapat tersendat jika server tidak cukup cepat.</p>
+        <p class="text-sm text-slate-300">Audio diproses per potongan 4 detik. Hasil pertama menunggu pemuatan model; sesudah itu server memprioritaskan latensi terkini.</p>
         <p v-if="rvcRuntime?.rvc_installed && !rvcRuntime.gpu_available" class="rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-300">
           Server tidak mendeteksi GPU; RVC Live berjalan di CPU dan kemungkinan tertinggal dari audio.
         </p>
         <label class="block">
           <span class="mb-1 flex justify-between text-sm"><span>Tune (semiton)</span><span class="font-mono text-violet-300">{{ rvcTune }}</span></span>
-          <input v-model.number="rvcTune" type="range" min="-12" max="12" class="w-full accent-violet-500" :disabled="live || stopping" />
+          <input v-model.number="rvcTune" type="range" min="-50" max="50" class="w-full accent-violet-500" :disabled="live || stopping" />
+        </label>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <label class="block text-sm">
+            <span class="mb-1 flex justify-between"><span>INDEX RATE</span><b>{{ rvcIndex }}%</b></span>
+            <input v-model.number="rvcIndex" type="range" min="0" max="100" class="w-full accent-violet-500" :disabled="live || stopping" />
+          </label>
+          <label class="block text-sm">
+            <span class="mb-1 flex justify-between"><span>RMS MIX</span><b>{{ rvcRms }}%</b></span>
+            <input v-model.number="rvcRms" type="range" min="0" max="100" class="w-full accent-violet-500" :disabled="live || stopping" />
+          </label>
+          <label class="block text-sm">
+            <span class="mb-1 flex justify-between"><span>PROTECT</span><b>{{ rvcProtect }}%</b></span>
+            <input v-model.number="rvcProtect" type="range" min="0" max="50" class="w-full accent-violet-500" :disabled="live || stopping" />
+          </label>
+          <label class="block text-sm">
+            <span class="mb-1 block">RVC QUALITY</span>
+            <select v-model="rvcQuality" class="input" :disabled="live || stopping">
+              <option :value="0">LOW</option>
+              <option :value="1">HIGH</option>
+            </select>
+          </label>
+        </div>
+        <label class="block text-sm">
+          <span class="mb-1 block">PERANGKAT INFERENSI</span>
+          <select v-model="rvcDevice" class="input" :disabled="live || stopping">
+            <option value="auto">Otomatis (GPU NVIDIA jika tersedia)</option>
+            <option value="cpu">CPU</option>
+            <option value="gpu" :disabled="!rvcRuntime?.gpu_available">
+              GPU NVIDIA CUDA{{ rvcRuntime?.gpu_name ? ` — ${rvcRuntime.gpu_name}` : '' }}{{ rvcRuntime?.gpu_available ? '' : ' (tidak tersedia)' }}
+            </option>
+          </select>
+          <span class="mt-1 block text-xs text-slate-400">
+            {{ rvcRuntime?.gpu_available ? `GPU tersedia: ${rvcRuntime.gpu_name}` : 'Server saat ini mendeteksi CPU-only.' }}
+          </span>
         </label>
         <router-link to="/karakter" class="btn-ghost w-full">Ganti model RVC</router-link>
       </template>

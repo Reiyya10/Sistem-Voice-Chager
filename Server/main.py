@@ -4,6 +4,7 @@
 - Model RVC dibaca dari folder_info.json + Models/<grup>/model_info.json (atau models.json lama),
   dan hanya dilayani bila ada "owner" (pemilik/pemberi izin) dan "consent_verified": true."""
 import asyncio, hashlib, importlib.util, json, logging, math, os, re, secrets, shutil, sqlite3, subprocess, tempfile, threading
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 import numpy as np
 from fastapi import FastAPI, UploadFile, File, Form, Header, HTTPException, WebSocket, WebSocketDisconnect
@@ -14,26 +15,32 @@ from starlette.background import BackgroundTask
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.environ.get("SUARAKU_DB", os.path.join(BASE, "suaraku.db"))
 MAX_BYTES = 10 * 1024 * 1024
+TRIAL_DAYS = 90
 DEMO = {"id": "demo", "name": "Demo server (tanpa AI, tes koneksi)", "owner": "SuaraKu", "license": "Bawaan"}
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="SuaraKu RVC")
-app.add_middleware(CORSMiddleware, allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
+app.add_middleware(CORSMiddleware, allow_origin_regex=r"http://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+):\d+",
                    allow_methods=["*"], allow_headers=["*"])
 
 _converter = None
 _converter_device = None
 _converter_lock = threading.Lock()
 LIVE_SAMPLE_RATE = 16000
-LIVE_CHUNK_SECONDS = 6
+LIVE_CHUNK_SECONDS = 4
 LIVE_CHUNK_BYTES = LIVE_SAMPLE_RATE * LIVE_CHUNK_SECONDS * 2
-LIVE_QUEUE_SIZE = 2
+LIVE_QUEUE_SIZE = 1
 
 
+@contextmanager
 def db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        with conn:
+            yield conn
+    finally:
+        conn.close()
 
 
 def init_db():
@@ -129,7 +136,11 @@ def gpu_status():
     if not has_rvc():
         return {"available": False, "name": ""}
     import torch
-    available = torch.cuda.is_available()
+    try:
+        available = torch.cuda.is_available()
+        torch.backends.cudnn.benchmark = True
+    except (AttributeError, RuntimeError):
+        available = False
     return {
         "available": available,
         "name": torch.cuda.get_device_name(0) if available else "",
@@ -173,6 +184,83 @@ def apply_audio_gain(input_path, gain_db):
             pass
         raise HTTPException(503, "ffmpeg tidak tersedia untuk menerapkan pengaturan gain.") from exc
     return output.name
+
+
+def smooth_rvc_output(input_path):
+    output = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+    output.close()
+    filters = (
+        "afftdn=nf=-30,"
+        "highpass=f=70,"
+        "lowpass=f=16000,"
+        "deesser=i=0.35:m=0.5,"
+        "alimiter=limit=0.88"
+    )
+    try:
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", input_path, "-vn", "-ac", "1", "-ar", "44100",
+             "-af", filters, output.name],
+            check=True, capture_output=True,
+        )
+        if not os.path.isfile(output.name) or os.path.getsize(output.name) == 0:
+            raise HTTPException(500, "Pemulusan hasil RVC tidak menghasilkan audio.")
+    except subprocess.CalledProcessError as exc:
+        remove_files([output.name])
+        raise HTTPException(500, "ffmpeg gagal memuluskan hasil RVC.") from exc
+    except OSError as exc:
+        remove_files([output.name])
+        raise HTTPException(503, "ffmpeg tidak tersedia untuk memuluskan hasil RVC.") from exc
+    return output.name
+
+
+def normalize_rvc_input(input_path, silence_front=1, silent_threshold=0.00001):
+    output = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+    output.close()
+    try:
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", input_path, "-vn", "-ac", "1", "-ar", "16000",
+             "-af", ("highpass=f=70,afftdn=nf=-28,aresample=16000,atrim=start=0.03," if silence_front else "highpass=f=70,afftdn=nf=-28,aresample=16000,")
+             + "volume=2dB", output.name],
+            check=True, capture_output=True,
+        )
+        if not os.path.isfile(output.name) or os.path.getsize(output.name) == 0:
+            raise HTTPException(500, "Normalisasi audio input tidak menghasilkan file.")
+        level = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-i", output.name, "-af", "volumedetect", "-f", "null", os.devnull],
+            capture_output=True,
+        )
+        match = re.search(r"mean_volume:\s*(-?(?:inf|\d+(?:\.\d+)?)\s*dB)", level.stderr.decode("utf-8", "ignore"))
+        if match:
+            text = match.group(1).lower()
+            if "inf" in text:
+                remove_files([output.name])
+                raise HTTPException(400, "Audio input tidak mengandung sinyal suara yang terdeteksi.")
+            try:
+                mean_db = float(text.replace("dB", "").strip())
+                threshold_db = 20 * math.log10(max(silent_threshold, 0.000001))
+                if mean_db < max(-55, threshold_db):
+                    remove_files([output.name])
+                    raise HTTPException(400, "Audio terlalu sunyi atau mikrofon tidak menangkap suara.")
+            except ValueError:
+                pass
+    except (subprocess.CalledProcessError, OSError) as exc:
+        remove_files([output.name])
+        if isinstance(exc, OSError):
+            raise HTTPException(503, "ffmpeg tidak tersedia untuk memproses audio.") from exc
+        raise HTTPException(500, "ffmpeg gagal membaca atau menormalisasi audio input.") from exc
+    return output.name
+
+
+def get_audio_duration(input_path):
+    try:
+        result = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", input_path],
+            check=True, capture_output=True,
+        )
+        return max(0.0, float(result.stdout.decode("utf-8").strip()))
+    except (subprocess.CalledProcessError, ValueError, OSError):
+        return 0.0
 
 
 def remove_files(paths):
@@ -260,19 +348,27 @@ def register(name: str = Form(...), email: str = Form(...), password: str = Form
         raise HTTPException(400, "Format email tidak valid.")
     if len(password) < 8:
         raise HTTPException(400, "Password minimal 8 karakter.")
+    now = datetime.now(timezone.utc)
+    premium_until = now + timedelta(days=TRIAL_DAYS)
     token = secrets.token_urlsafe(32)
     try:
         with db() as conn:
             cursor = conn.execute(
-                "INSERT INTO users(name,email,password_hash,created_at) VALUES(?,?,?,?)",
-                (name, email, hash_password(password), datetime.now(timezone.utc).isoformat()),
+                "INSERT INTO users(name,email,password_hash,premium_until,created_at) VALUES(?,?,?,?,?)",
+                (name, email, hash_password(password), premium_until.isoformat(), now.isoformat()),
             )
             user_id = cursor.lastrowid
             conn.execute("INSERT INTO sessions(token,user_id,created_at) VALUES(?,?,?)",
-                         (token, user_id, datetime.now(timezone.utc).isoformat()))
+                         (token, user_id, now.isoformat()))
+            conn.execute(
+                "INSERT INTO payments(user_id,plan,amount,status,provider,created_at) VALUES(?,?,?,?,?,?)",
+                (user_id, "3_month_trial", 0, "trial", "suaraku", now.isoformat()),
+            )
     except sqlite3.IntegrityError:
         raise HTTPException(409, "Email sudah terdaftar.")
-    return {"token": token, "user": account_payload({"id": user_id, "name": name, "email": email, "premium_until": None})}
+    return {"token": token, "user": account_payload({
+        "id": user_id, "name": name, "email": email, "premium_until": premium_until.isoformat(),
+    })}
 
 
 def account_payload(user):
@@ -353,14 +449,17 @@ def purchase_premium(months: int = Form(...), authorization: str = Header(defaul
 async def convert(
     authorization: str = Header(default=""),
     model_id: str = Form(...),
-    pitch: int = Form(0, ge=-12, le=12),
+    pitch: int = Form(0, ge=-50, le=50),
     input_gain_db: float = Form(0, ge=-24, le=12),
     output_gain_db: float = Form(0, ge=-24, le=12),
     chunk_seconds: int = Form(30, ge=10, le=40),
-    index_influence: float = Form(0.66, ge=0, le=1),
+    index_influence: float = Form(0.85, ge=0, le=1),
     rms_mix_rate: float = Form(0.25, ge=0, le=1),
-    consonant_protection: float = Form(0.33, ge=0, le=0.5),
+    consonant_protection: float = Form(0.35, ge=0, le=0.5),
     device: str = Form("auto"),
+    silent_threshold: float = Form(0.00001, ge=0, le=0.001),
+    silence_front: int = Form(1, ge=0, le=1),
+    rvc_quality: int = Form(1, ge=0, le=1),
     audio: UploadFile = File(...),
 ):
     require_premium(authorization)
@@ -396,14 +495,26 @@ async def convert(
         try:
             with _converter_lock:
                 conv = get_converter(device)
+                normalized_input = normalize_rvc_input(tmp.name, silence_front, silent_threshold)
+                input_path = normalized_input
                 if input_gain_db:
-                    input_path = apply_audio_gain(tmp.name, input_gain_db)
-                conv.config.x_center = chunk_seconds
-                conv.config.x_max = chunk_seconds + 3
+                    gain_path = apply_audio_gain(normalized_input, input_gain_db)
+                    remove_files([normalized_input])
+                    normalized_input = gain_path
+                    input_path = gain_path
+                duration = get_audio_duration(input_path)
+                if duration > 0 and duration <= 6:
+                    adaptive_chunk = 10
+                elif duration <= 15:
+                    adaptive_chunk = 12
+                else:
+                    adaptive_chunk = max(10, min(40, chunk_seconds))
+                conv.config.x_center = adaptive_chunk
+                conv.config.x_max = adaptive_chunk + (5 if rvc_quality else 3)
                 conv.apply_conf(
                     tag=m["id"], file_model=os.path.join(BASE, m["model"]), pitch_algo="rmvpe+",
-                    pitch_lvl=max(-12, min(12, pitch)), file_index=os.path.join(BASE, m["index"]) if m.get("index") else "",
-                    index_influence=index_influence, respiration_median_filtering=3, envelope_ratio=rms_mix_rate,
+                    pitch_lvl=pitch, file_index=os.path.join(BASE, m["index"]) if m.get("index") else "",
+                    index_influence=index_influence, respiration_median_filtering=5 if rvc_quality else 3, envelope_ratio=rms_mix_rate,
                     consonant_breath_protection=consonant_protection)
                 res = conv(input_path, m["id"], overwrite=False, parallel_workers=1)
         except Exception as exc:
@@ -418,11 +529,12 @@ async def convert(
         if not res or not res[0] or not os.path.isfile(res[0]) or os.path.getsize(res[0]) == 0:
             raise HTTPException(500, "Konversi RVC tidak menghasilkan file audio.")
         try:
-            output_path = apply_audio_gain(res[0], output_gain_db) if output_gain_db else res[0]
+            smoothed_path = smooth_rvc_output(res[0])
+            output_path = apply_audio_gain(smoothed_path, output_gain_db) if output_gain_db else smoothed_path
         except HTTPException:
             remove_files([res[0]])
             raise
-        cleanup = [res[0]] if output_path != res[0] else []
+        cleanup = [res[0], smoothed_path]
         cleanup.append(output_path)
         return FileResponse(
             output_path, media_type="audio/wav", headers={"X-AI-Generated": "true"},
@@ -446,7 +558,7 @@ def convert_live_chunk(raw_audio, model, settings):
     with _converter_lock:
         conv = get_converter(settings["device"])
         conv.config.x_center = LIVE_CHUNK_SECONDS
-        conv.config.x_max = LIVE_CHUNK_SECONDS + 3
+        conv.config.x_max = LIVE_CHUNK_SECONDS + 2
         conv.apply_conf(
             tag=model["id"],
             file_model=os.path.join(BASE, model["model"]),
@@ -454,7 +566,7 @@ def convert_live_chunk(raw_audio, model, settings):
             pitch_lvl=settings["pitch"],
             file_index=os.path.join(BASE, model["index"]) if model.get("index") else "",
             index_influence=settings["index_influence"],
-            respiration_median_filtering=3,
+            respiration_median_filtering=5 if settings["rvc_quality"] else 3,
             envelope_ratio=settings["rms_mix_rate"],
             consonant_breath_protection=settings["consonant_protection"],
         )
@@ -466,13 +578,24 @@ def convert_live_chunk(raw_audio, model, settings):
             -32768,
             32767,
         ).astype(np.int16)
-    return audio.astype("<i2", copy=False).tobytes(), sample_rate
+    audio = audio.astype(np.float32)
+    if audio.size > 8:
+        kernel = np.array([0.1, 0.2, 0.4, 0.2, 0.1], dtype=np.float32)
+        audio = np.convolve(audio, kernel, mode="same")
+        fade = min(int(sample_rate * 0.04), audio.size // 2)
+        if fade:
+            audio[:fade] *= np.linspace(0.2, 1.0, fade, dtype=np.float32)
+            audio[-fade:] *= np.linspace(1.0, 0.2, fade, dtype=np.float32)
+    peak = float(np.max(np.abs(audio))) if audio.size else 0
+    if peak > 24576:
+        audio *= 24576 / peak
+    return np.clip(audio, -32768, 32767).astype("<i2").tobytes(), sample_rate
 
 
 @app.websocket("/live")
 async def live_convert(websocket: WebSocket):
     origin = websocket.headers.get("origin", "")
-    if origin and not re.fullmatch(r"http://(localhost|127\.0\.0\.1):\d+", origin):
+    if origin and not re.fullmatch(r"http://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+):\d+", origin):
         await websocket.close(code=1008)
         return
 
@@ -512,18 +635,19 @@ async def live_convert(websocket: WebSocket):
                 "pitch": int(settings.get("pitch", 0)),
                 "input_gain_db": float(settings.get("input_gain_db", 0)),
                 "output_gain_db": float(settings.get("output_gain_db", 0)),
-                "index_influence": float(settings.get("index_influence", 0.66)),
+                "index_influence": float(settings.get("index_influence", 0.85)),
                 "rms_mix_rate": float(settings.get("rms_mix_rate", 0.25)),
-                "consonant_protection": float(settings.get("consonant_protection", 0.33)),
+                "consonant_protection": float(settings.get("consonant_protection", 0.35)),
                 "device": str(settings.get("device", "auto")),
+                "rvc_quality": int(settings.get("rvc_quality", 1)),
             }
         except (TypeError, ValueError):
             await websocket.send_json({"type": "error", "message": "Pengaturan RVC Live tidak valid."})
             await websocket.close(code=1008)
             return
 
-        if not -12 <= options["pitch"] <= 12:
-            await websocket.send_json({"type": "error", "message": "Tune harus antara -12 dan 12 semiton."})
+        if not -50 <= options["pitch"] <= 50:
+            await websocket.send_json({"type": "error", "message": "Tune harus antara -50 dan 50."})
             await websocket.close(code=1008)
             return
         if not -24 <= options["input_gain_db"] <= 12 or not -24 <= options["output_gain_db"] <= 12:
@@ -540,6 +664,10 @@ async def live_convert(websocket: WebSocket):
             return
         if options["device"] not in {"auto", "cpu", "gpu"}:
             await websocket.send_json({"type": "error", "message": "Perangkat harus auto, cpu, atau gpu."})
+            await websocket.close(code=1008)
+            return
+        if options["rvc_quality"] not in {0, 1}:
+            await websocket.send_json({"type": "error", "message": "RVC Quality harus low atau high."})
             await websocket.close(code=1008)
             return
 

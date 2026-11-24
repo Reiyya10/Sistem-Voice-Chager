@@ -2,7 +2,7 @@ import { onBeforeUnmount, ref } from 'vue'
 import { rvcLiveUrl } from '../Audio/rvc.js'
 
 const SAMPLE_RATE = 16000
-const CHUNK_SECONDS = 6
+const CHUNK_SECONDS = 4
 const CHUNK_SAMPLES = SAMPLE_RATE * CHUNK_SECONDS
 const MIN_CHUNK_SAMPLES = SAMPLE_RATE
 const CHUNK_BYTES = CHUNK_SAMPLES * 2
@@ -60,7 +60,7 @@ export function useLiveRvc() {
 
   function sendChunk(samples) {
     if (!socket || socket.readyState !== WebSocket.OPEN) return false
-    if (socket.bufferedAmount > CHUNK_BYTES * 2) {
+    if (socket.bufferedAmount > CHUNK_BYTES) {
       fail('Server RVC tertinggal dari audio Live. Coba gunakan GPU atau hentikan sesi lalu mulai lagi.')
       return false
     }
@@ -114,10 +114,11 @@ export function useLiveRvc() {
           pitch: settings.pitch ?? 0,
           input_gain_db: settings.inputGainDb ?? 0,
           output_gain_db: settings.outputGainDb ?? 0,
-          index_influence: settings.indexInfluence ?? 0.66,
+          index_influence: settings.indexInfluence ?? 0.85,
           rms_mix_rate: settings.rmsMixRate ?? 0.25,
-          consonant_protection: settings.consonantProtection ?? 0.33,
+          consonant_protection: settings.consonantProtection ?? 0.35,
           device: settings.device ?? 'auto',
+          rvc_quality: settings.rvcQuality ?? 1,
         }))
       }
       socket.onmessage = (event) => {
@@ -159,6 +160,10 @@ export function useLiveRvc() {
     error.value = ''
     latency.value = 0
     sentAt.length = 0
+    if (!window.isSecureContext) {
+      error.value = 'Mode Live perlu HTTPS tepercaya. Buka alamat HTTPS aplikasi; localhost hanya berlaku di perangkat yang menjalankan browser.'
+      return
+    }
     if (!modelId) { error.value = 'Pilih model RVC dari halaman Karakter terlebih dahulu.'; return }
     const AudioContextClass = window.AudioContext || window.webkitAudioContext
     if (!navigator.mediaDevices?.getUserMedia || !AudioContextClass) {
@@ -168,7 +173,12 @@ export function useLiveRvc() {
     try {
       await connect(modelId, settings)
       stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: false, noiseSuppression: true, autoGainControl: false },
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+          channelCount: 1,
+        },
       })
       context = new AudioContextClass({ latencyHint: 'interactive' })
       await context.resume()
@@ -183,7 +193,9 @@ export function useLiveRvc() {
       live.value = true
       nextOutputTime = context.currentTime + 0.12
     } catch (e) {
-      error.value = e.message || 'Gagal memulai RVC Live.'
+      error.value = e.name === 'NotAllowedError'
+        ? 'Izin mikrofon ditolak. Izinkan mikrofon untuk situs ini di pengaturan browser.'
+        : e.message || 'Gagal memulai RVC Live.'
       releaseInput()
       if (socket && socket.readyState < WebSocket.CLOSING) socket.close()
       releaseContext()

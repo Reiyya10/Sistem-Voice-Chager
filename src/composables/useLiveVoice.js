@@ -68,14 +68,20 @@ export function useLiveVoice() {
 
   async function start() {
     error.value = ''
+    if (!window.isSecureContext) {
+      error.value = 'Mode Live perlu HTTPS tepercaya. Buka alamat HTTPS aplikasi; localhost hanya berlaku di perangkat yang menjalankan browser.'
+      return
+    }
     if (!navigator.mediaDevices?.getUserMedia) {
       error.value = 'Browser tidak mendukung mikrofon. Pakai Chrome atau Edge lewat localhost atau HTTPS.'
       return
     }
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false } })
-    } catch {
-      error.value = 'Izin mikrofon ditolak atau mikrofon tidak ditemukan.'
+    } catch (e) {
+      error.value = e.name === 'NotAllowedError'
+        ? 'Izin mikrofon ditolak. Izinkan mikrofon untuk situs ini di pengaturan browser.'
+        : 'Mikrofon tidak tersedia atau sedang digunakan aplikasi lain.'
       return
     }
     ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' })

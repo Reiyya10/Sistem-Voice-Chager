@@ -1,5 +1,9 @@
 // Klien untuk server RVC (lihat folder server/). Alamat bisa diubah lewat .env: VITE_RVC_URL
-const BASE = import.meta.env.VITE_RVC_URL || 'http://localhost:8000'
+const configuredBase = import.meta.env.VITE_RVC_URL
+const browserHost = window.location.hostname || 'localhost'
+const BASE = configuredBase || (import.meta.env.DEV
+  ? '/api'
+  : `${window.location.protocol}//${browserHost}:8000`)
 const coverAssets = import.meta.glob('../../Server/Models/**/cover.png', { eager: true, query: '?url', import: 'default' })
 
 export async function rvcStatus() {
@@ -25,7 +29,7 @@ export function rvcModelCoverUrl(modelId) {
 }
 
 export function rvcLiveUrl() {
-  const url = new URL(BASE)
+  const url = new URL(BASE, window.location.href)
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
   url.pathname = `${url.pathname.replace(/\/$/, '')}/live`
   return url.toString()
@@ -39,10 +43,13 @@ export async function rvcConvert(blob, modelId, settings = {}) {
   fd.append('input_gain_db', String(settings.inputGainDb ?? 0))
   fd.append('output_gain_db', String(settings.outputGainDb ?? 0))
   fd.append('chunk_seconds', String(settings.chunkSeconds ?? 30))
-  fd.append('index_influence', String(settings.indexInfluence ?? 0.66))
+  fd.append('index_influence', String(settings.indexInfluence ?? 0.85))
   fd.append('rms_mix_rate', String(settings.rmsMixRate ?? 0.25))
-  fd.append('consonant_protection', String(settings.consonantProtection ?? 0.33))
+  fd.append('consonant_protection', String(settings.consonantProtection ?? 0.35))
   fd.append('device', String(settings.device ?? 'auto'))
+  fd.append('silent_threshold', String(settings.silentThreshold ?? 0.00001))
+  fd.append('silence_front', String(settings.silenceFront ?? 1))
+  fd.append('rvc_quality', String(settings.rvcQuality ?? 1))
   let r
   const token = settings.accessToken
   try {

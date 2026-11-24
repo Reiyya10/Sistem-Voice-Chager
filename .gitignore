@@ -9,6 +9,7 @@ Sistem-Voice-Chager/
 node_modules/
 dist/
 build/
+certs/
 *.log
 .cache/
 .pytest_cache/

@@ -14,7 +14,7 @@ async function submit() {
   try {
     if (tab.value === 'masuk') await apiLogin(f.email, f.pass)
     else await apiRegister(f.nama, f.email, f.pass)
-    toast(tab.value === 'masuk' ? 'Berhasil masuk.' : 'Akun berhasil dibuat.')
+    toast(tab.value === 'masuk' ? 'Berhasil masuk.' : 'Akun berhasil dibuat. Premium gratis aktif selama 3 bulan.')
     router.push('/voice-changer')
   } catch (e) {
     err.pass = e.message

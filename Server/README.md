@@ -46,13 +46,39 @@ tidak digunakan oleh server; format daftar model lama, jika diperlukan, berada d
    hasil awal memiliki jeda beberapa detik. Untuk Live, mulai ulang server setelah memasang
    dependensi yang diperbarui.
 
+## Merekam dari handphone (HTTPS lokal)
+
+Browser handphone hanya memberi akses mikrofon pada halaman HTTPS tepercaya atau
+`localhost` di perangkat itu sendiri. `localhost` di handphone bukan laptop. Untuk
+menggunakan rekaman dan Live melalui Wi-Fi yang sama:
+
+1. Pasang `mkcert` di Windows: `winget install --id FiloSottile.mkcert --exact`.
+2. Jalankan `ipconfig`, cari IPv4 pada adaptor Wi-Fi, lalu dari folder proyek jalankan
+   `Server\setup-mobile-https.bat <IP-laptop>` (contoh:
+   `Server\setup-mobile-https.bat 192.168.100.59`). Sertifikat lokal akan dibuat di
+   folder `certs` dan tidak dilacak Git.
+3. Pindahkan `certs\rootCA.crt` ke handphone dan percayai sertifikat itu. Di Android,
+   salin file itu ke handphone, lalu buka **Setelan > Keamanan > Enkripsi & kredensial >
+   Pasang sertifikat > Sertifikat CA**. Nama menu dapat berbeda menurut merek Android.
+   Jangan membagikan file CA atau private key.
+4. Jalankan `Server\run.bat`, lalu mulai ulang frontend dengan `npm.cmd run dev`.
+   Buka `https://<IP-laptop>:5173` di Chrome atau Edge dan izinkan akses mikrofon.
+
+Vite meneruskan API dan WebSocket Live ke backend lokal, sehingga koneksi tetap aman
+meski backend berjalan pada HTTP di laptop. Handphone harus berada di Wi-Fi yang sama;
+sertifikat perlu dibuat ulang bila alamat IP laptop berubah. Jika browser masih
+menampilkan peringatan sertifikat, pastikan CA sudah dipercaya dan mulai ulang browser.
+
 ## Akun dan Premium
 
 Server menyimpan akun, session, paket, dan masa aktif Premium di `Server/suaraku.db`
 (SQLite). Registrasi dan login tersedia melalui API `/auth/register` dan `/auth/login`.
+Setiap akun baru memperoleh trial Premium selama 90 hari; trial dicatat di tabel
+`payments` dengan status `trial`. Akses RVC otomatis berakhir saat masa trial habis.
 Endpoint RVC `/convert` dan `/live` hanya menerima pengguna dengan Premium aktif.
-Pembelian melalui `/payments/demo` adalah simulasi. Untuk produksi, ganti endpoint
-tersebut dengan verifikasi webhook gateway pembayaran nyata.
+Pembelian melalui `/payments/demo` adalah simulasi dan tidak menarik pembayaran nyata.
+Untuk produksi, hubungkan halaman langganan ke gateway pembayaran dan verifikasi status
+pembayaran melalui webhook sebelum memperpanjang Premium.
 
 Jika belum ada model terverifikasi, server hanya menampilkan model demo (perlu ffmpeg).
 Demo dipakai untuk menguji alur upload dan pemutaran hasil, bukan konversi AI.

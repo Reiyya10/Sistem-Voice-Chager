@@ -4,21 +4,20 @@ import { useRouter } from 'vue-router'
 import VoiceRecorder from '../components/VoiceRecorder.vue'
 import AudioPlayer from '../components/AudioPlayer.vue'
 import EffectSlider from '../components/EffectSlider.vue'
-import CharacterModal from '../components/CharacterModal.vue'
 import LiveVoice from '../components/LiveVoice.vue'
 import { presets } from '../audio/presets.js'
-import { processAudio, blobToDataURL } from '../audio/processor.js'
+import { processAudio } from '../audio/processor.js'
 import { store, toast, addRecording } from '../store.js'
 import { rvcStatus, rvcConvert, rvcModelCoverUrl } from '../Audio/rvc.js'
 const router = useRouter()
 const mode = ref('rekam')
 const useRvc = computed(() => Boolean(store.rvcModelId))
 const rvcOnline = ref(false), rvcGpu = ref({ available: false, name: '' })
-const modal = ref(false), busy = ref(false), error = ref('')
+const busy = ref(false), error = ref('')
 const source = ref(null), srcName = ref(''), origUrl = ref(''), resultUrl = ref('')
 const defaults = { pitch: 50, volume: 70, echo: 0, reverb: 0 }
 const fx = reactive({ ...defaults })
-const rvcDefaults = { tune: 0, inputGain: 0, outputGain: 0, chunkSeconds: 30, indexInfluence: 66, rmsMix: 25, consonantProtection: 33, device: 'auto' }
+const rvcDefaults = { tune: 0, inputGain: 0, outputGain: 0, chunkSeconds: 30, indexInfluence: 85, rmsMix: 25, consonantProtection: 35, device: 'auto', silentThreshold: 1, silenceFront: true, rvcQuality: 1, f0Detector: 'rmvpe+' }
 const rvcFx = reactive({ ...rvcDefaults })
 const labels = [['pitch', 'Pitch'], ['volume', 'Volume'], ['echo', 'Gema (echo)'], ['reverb', 'Ruang (reverb)']]
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v))
@@ -68,10 +67,13 @@ async function convert() {
         consonantProtection: rvcFx.consonantProtection / 100,
         device: rvcFx.device,
         accessToken: store.accessToken,
+        silentThreshold: rvcFx.silentThreshold / 100000,
+        silenceFront: rvcFx.silenceFront ? 1 : 0,
+        rvcQuality: rvcFx.rvcQuality,
       })
     } else out = await processAudio(source.value, p)
     resultUrl.value = URL.createObjectURL(out)
-    addRecording({ id: Date.now(), name: srcName.value, char: useRvc.value ? store.rvcModelName : store.selected.name, date: new Date().toLocaleDateString('id-ID'), url: await blobToDataURL(out) })
+    await addRecording({ id: Date.now(), name: srcName.value, char: useRvc.value ? store.rvcModelName : store.selected.name, date: new Date().toLocaleDateString('id-ID'), blob: out })
     toast('Done! Suara barumu sudah siap.')
   } catch (e) { error.value = e.message || 'Gagal memproses audio. Coba file atau rekaman lain.' }
   busy.value = false
@@ -101,7 +103,7 @@ async function convert() {
             </span>
             <p class="font-semibold">{{ useRvc ? store.rvcModelName : store.selected.name }}</p>
           </div>
-          <button class="btn-ghost w-full" @click="useRvc ? router.push('/karakter') : modal = true">{{ useRvc ? 'Ganti Model di Karakter' : 'Ganti Karakter' }}</button>
+          <button class="btn-ghost w-full" @click="router.push('/karakter')">{{ useRvc ? 'Ganti Model RVC di Karakter' : 'Pilih Karakter di Halaman Karakter' }}</button>
         </section>
         <section class="space-y-6">
           <VoiceRecorder @done="onRecorded" />
@@ -115,16 +117,37 @@ async function convert() {
           <template v-if="useRvc">
             <EffectSlider v-model="rvcFx.inputGain" label="Gain input" :min-value="-24" :max-value="12" unit=" dB" />
             <EffectSlider v-model="rvcFx.outputGain" label="Gain output" :min-value="-24" :max-value="12" unit=" dB" />
-            <EffectSlider v-model="rvcFx.tune" label="Tune (semiton)" :min-value="-12" :max-value="12" />
+            <EffectSlider v-model="rvcFx.tune" label="TUNE" :min-value="-50" :max-value="50" />
             <EffectSlider v-model="rvcFx.chunkSeconds" label="Ukuran chunk (perkiraan)" :min-value="10" :max-value="40" unit=" dtk" />
             <details class="rounded-xl border border-slate-700 p-3">
               <summary class="cursor-pointer font-semibold">Extra RVC</summary>
               <div class="mt-4 space-y-5">
-                <EffectSlider v-model="rvcFx.indexInfluence" label="Index influence" unit="%" />
+                <EffectSlider v-model="rvcFx.indexInfluence" label="INDEX RATE" unit="%" />
                 <p class="-mt-4 text-xs text-slate-400">Pengaruh index terhadap karakter timbre; 0% menonaktifkan index.</p>
                 <EffectSlider v-model="rvcFx.rmsMix" label="RMS mix" unit="%" />
                 <p class="-mt-4 text-xs text-slate-400">0% memakai level hasil RVC, 100% mengikuti level volume input.</p>
-                <EffectSlider v-model="rvcFx.consonantProtection" label="Perlindungan konsonan" :max-value="50" unit="%" />
+                <EffectSlider v-model="rvcFx.consonantProtection" label="PROTECT" :max-value="50" unit="%" />
+                <label class="block text-sm">
+                  <span class="mb-1 block">F0 DETECTOR</span>
+                  <select v-model="rvcFx.f0Detector" class="input" disabled>
+                    <option value="rmvpe+">RMVPE+</option>
+                  </select>
+                </label>
+                <EffectSlider v-model="rvcFx.silentThreshold" label="S. THRESHOLD" :min-value="0" :max-value="100" :step="1" unit="" />
+                <label class="flex items-center justify-between text-sm">
+                  <span>SILENCE FRONT</span>
+                  <select v-model="rvcFx.silenceFront" class="input w-28">
+                    <option :value="true">ON</option>
+                    <option :value="false">OFF</option>
+                  </select>
+                </label>
+                <label class="flex items-center justify-between text-sm">
+                  <span>RVC QUALITY</span>
+                  <select v-model="rvcFx.rvcQuality" class="input w-28">
+                    <option :value="0">LOW</option>
+                    <option :value="1">HIGH</option>
+                  </select>
+                </label>
               </div>
             </details>
             <label class="block text-sm">
@@ -151,6 +174,5 @@ async function convert() {
       </div>
     </template>
     <LiveVoice v-else />
-    <CharacterModal v-if="modal" @close="modal = false" />
   </div>
 </template>
