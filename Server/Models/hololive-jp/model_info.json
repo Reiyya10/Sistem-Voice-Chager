@@ -1,0 +1,62 @@
+{
+  "miko": {
+    "enable": true,
+    "model_path": "miko.pth",
+    "title": "Sakura Miko",
+    "cover": "cover.png",
+    "feature_retrieval_library": "added_IVF1141_Flat_nprobe_1_v1.index",
+    "author": "megaaziib",
+    "owner": "megaaziib",
+    "consent_verified": true
+  },
+  "korone": {
+    "enable": true,
+    "model_path": "KORONE.pth",
+    "title": "Inugami Korone",
+    "cover": "cover.png",
+    "feature_retrieval_library": "added_IVF1732_Flat_nprobe_1_KORONE_v2.index",
+    "author": "dacoolkid44 and hijack",
+    "owner": "dacoolkid44 and hijack",
+    "consent_verified": true
+  },
+  "subaru": {
+    "enable": true,
+    "model_path": "subaru.pth",
+    "title": "Oozora Subaru",
+    "cover": "cover.png",
+    "feature_retrieval_library": "added_IVF576_Flat_nprobe_1.index",
+    "author": "megaaziib",
+    "owner": "megaaziib",
+    "consent_verified": true
+  },
+   "pekora": {
+    "enable": true,
+    "model_path": "pekora.pth",
+    "title": "Usada Pekora",
+    "cover": "cover.png",
+    "feature_retrieval_library": "added_IVF801_Flat_nprobe_1.index",
+    "author": "megaaziib",
+    "owner": "megaaziib",
+    "consent_verified": true
+  },
+   "luna": {
+    "enable": true,
+    "model_path": "luna.pth",
+    "title": "Himemori Luna",
+    "cover": "cover.png",
+    "feature_retrieval_library": "added_IVF852_Flat_nprobe_1_v1.index",
+    "author": "megaaziib",
+    "owner": "megaaziib",
+    "consent_verified": true
+  },
+   "watame": {
+    "enable": true,
+    "model_path": "TsunomakiWatame_e500_s7500.pth",
+    "title": "Tsunomaki Watame",
+    "cover": "cover.png",
+    "feature_retrieval_library": "added_IVF288_Flat_nprobe_1_TsunomakiWatame_v2.index",
+    "author": "yeey5",
+    "owner": "yeey5",
+    "consent_verified": true
+  }
+}

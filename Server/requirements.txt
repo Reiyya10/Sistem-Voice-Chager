@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+websockets>=12,<16
+python-multipart
+infer_rvc_python
+numpy<2
+setuptools<=80.6.0

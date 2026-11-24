@@ -1,0 +1,52 @@
+{
+  "amelia": {
+    "enable": true,
+    "model_path": "Amelia.pth",
+    "title": "Amelia Watson",
+    "cover": "cover.png",
+    "feature_retrieval_library": "added_IVF4964_Flat_nprobe_1_Amelia_v2.index",
+    "author": "dacoolkid44 & Hijack",
+    "owner": "dacoolkid44 & Hijack",
+    "consent_verified": true
+  },
+  "calli": {
+    "enable": true,
+    "model_path": "MoriCalliope_e350_s6650.pth",
+    "title": "Mori Calliope",
+    "cover": "cover.png",
+    "feature_retrieval_library": "added_IVF413_Flat_nprobe_1_MoriCalliope_v2.index",
+    "author": "yeey5",
+    "owner": "yeey5",
+    "consent_verified": true
+  },
+   "gura": {
+    "enable": true,
+    "model_path": "GuraTalkV2.pth",
+    "title": "Gawr Gura",
+    "cover": "cover.png",
+    "feature_retrieval_library": "added_IVF2887_Flat_nprobe_1_GuraTalkV2_v2.index",
+    "author": "dacoolkid44 & Hijack",
+    "owner": "dacoolkid44 & Hijack",
+    "consent_verified": true
+  },
+   "ina": {
+    "enable": true,
+    "model_path": "Inatalk2.pth",
+    "title": "Ninomae Ina'nis",
+    "cover": "cover.png",
+    "feature_retrieval_library": "added_IVF1754_Flat_nprobe_1_Inatalk2_v2.index",
+    "author": "dacoolkid44 & Hijack",
+    "owner": "dacoolkid44 & Hijack",
+    "consent_verified": true
+  },
+   "kiara": {
+    "enable": true,
+    "model_path": "Kiara.pth",
+    "title": "Takanashi Kiara",
+    "cover": "cover.png",
+    "feature_retrieval_library": "added_IVF4961_Flat_nprobe_1.index",
+    "author": "dacoolkid44 & Hijack",
+    "owner": "dacoolkid44 & Hijack",
+    "consent_verified": true
+  }
+}

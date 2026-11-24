@@ -1,0 +1,92 @@
+{
+  "moona": {
+    "enable": true,
+    "model_path": "moona.pth",
+    "title": "Moona Hoshinova",
+    "cover": "cover.png",
+    "feature_retrieval_library": "added_IVF1259_Flat_nprobe_1_v2.index",
+    "author": "megaaziib",
+    "owner": "megaaziib",
+    "consent_verified": true
+  },
+  "iofi": {
+    "enable": true,
+    "model_path": "AiraniIofifteen_Speaking_V2_e180_s32400.pth",
+    "title": "Airani Iofifteen",
+    "cover": "cover.png",
+    "feature_retrieval_library": "added_IVF256_Flat_nprobe_1_AiraniIofifteen_Speaking_V2_v2.index",
+    "author": "Kit Lemonfoot / NSHFB",
+    "owner": "Kit Lemonfoot / NSHFB",
+    "consent_verified": true
+  },
+  "risu": {
+    "enable": true,
+    "model_path": "risu.pth",
+    "title": "Ayunda Risu",
+    "cover": "cover.png",
+    "feature_retrieval_library": "added_IVF2090_Flat_nprobe_1_v2.index",
+    "author": "megaaziib",
+    "owner": "megaaziib",
+    "consent_verified": true
+  },
+  "ollie": {
+    "enable": true,
+    "model_path": "ollie_e485_s15035.pth",
+    "title": "Kureiji Ollie",
+    "cover": "cover.png",
+    "feature_retrieval_library": "added_IVF2227_Flat_nprobe_1_ollie_v2.index",
+    "author": "dacoolkid44 & Hijack",
+    "owner": "dacoolkid44 & Hijack",
+    "consent_verified": true
+  },
+   "reine": {
+    "enable": true,
+    "model_path": "reine.pth",
+    "title": "Pavolia Reine",
+    "cover": "cover.png",
+    "feature_retrieval_library": "added_IVF653_Flat_nprobe_1.index",
+    "author": "megaaziib",
+    "owner": "megaaziib",
+    "consent_verified": true
+  },
+   "anya": {
+    "enable": true,
+    "model_path": "anya.pth",
+    "title": "Anya Melfissa",
+    "cover": "cover.png",
+    "feature_retrieval_library": "added_IVF787_Flat_nprobe_1.index",
+    "author": "megaaziib",
+    "owner": "megaaziib",
+    "consent_verified": true
+  },
+   "zeta": {
+    "enable": true,
+    "model_path": "zetav2.pth",
+    "title": "Vestia Zeta",
+    "cover": "cover.png",
+    "feature_retrieval_library": "added_IVF462_Flat_nprobe_1_zetav2_v2.index",
+    "author": "megaaziib",
+    "owner": "megaaziib",
+    "consent_verified": true
+  },
+  "kobo": {
+    "enable": true,
+    "model_path": "kobo.pth",
+    "title": "Kobo Kanaeru",
+    "cover": "cover.png",
+    "feature_retrieval_library": "added_IVF353_Flat_nprobe_1.index",
+    "author": "megaaziib",
+    "owner": "megaaziib",
+    "consent_verified": true
+  },
+   "kaela": {
+    "enable": true,
+    "model_path": "kaela.pth",
+    "title": "Kaela Kovalskia",
+    "cover": "cover.png",
+    "feature_retrieval_library": "added_IVF250_Flat_nprobe_1.index",
+    "author": "megaaziib",
+    "owner": "megaaziib",
+    "consent_verified": true
+  }
+}
